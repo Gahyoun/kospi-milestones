@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>코스피 1000단위 경신일</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{ --orange:#D85A30; --line:rgba(216,90,48,0.55); --fill:rgba(216,90,48,0.08);
+         --ink:#1a1a18; --muted:#6b6a64; --grid:rgba(136,135,128,0.15); --bg:#ffffff; --card:#faf9f6; }
+  @media (prefers-color-scheme: dark){
+    :root{ --ink:#ededea; --muted:#a3a29b; --grid:rgba(200,200,190,0.12); --bg:#1a1a18; --card:#242420; }
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; padding:24px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif;
+        background:var(--bg); color:var(--ink); }
+  .wrap{ max-width:860px; margin:0 auto; }
+  h1{ font-size:22px; font-weight:600; margin:0 0 4px; }
+  .sub{ font-size:13px; color:var(--muted); margin:0 0 20px; }
+  .controls{ display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .controls span.lbl{ font-size:13px; color:var(--muted); }
+  .seg{ display:inline-flex; border:1px solid var(--grid); border-radius:8px; overflow:hidden; }
+  .seg button{ border:0; padding:6px 16px; font-size:13px; cursor:pointer; background:transparent; color:var(--muted); }
+  .seg button.on{ background:var(--orange); color:#fff; }
+  .legend{ font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:11px; height:11px; border-radius:50%; background:var(--orange); border:2px solid var(--bg); display:inline-block; }
+  .chart-box{ position:relative; width:100%; height:440px; background:var(--card); border-radius:12px; padding:12px; }
+  .note{ font-size:12px; color:var(--muted); margin-top:14px; line-height:1.7;
+         background:var(--card); border-radius:10px; padding:12px 14px; }
+  .note b{ color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>코스피 지수 1000단위 경신일</h1>
+  <p class="sub">1980.1.4 기준점(100) → 2026.5.26 종가 8,047.51 · 종가 기준</p>
+
+  <div class="controls">
+    <span class="lbl">Y축 스케일</span>
+    <div class="seg">
+      <button id="btn-lin" class="on">선형</button>
+      <button id="btn-log">로그</button>
+    </div>
+    <span class="legend"><span class="dot"></span>주황 점 = 1000단위 최초 돌파</span>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="kospi"></canvas>
+  </div>
+
+  <p class="note">
+    <b>⚠️ 데이터 주의:</b> 1980~2025년 구간은 <b>연간(연말 종가) + 주요 위기 저점</b>만 담은 근사치입니다.
+    일별 시계열이 아니라 연중 단기 등락은 표현되지 않습니다. 2025년 하반기~2026년 급등 구간(4,000~8,000)은
+    AI·반도체(HBM) 수요 랠리로, 머니투데이·서울경제 등 보도 종가값을 반영했습니다.<br>
+    <b>출처:</b> 한국거래소(KRX) 종가 기준. · 마우스를 그래프 위에 올리면 시점과 지수값이 표시됩니다.<br>
+    참고: 날짜축(x)은 로그가 의미 없어 선형으로 고정했고, 지수값(y)만 로그 전환을 제공합니다.
+  </p>
+</div>
+
+<script>
+const ORANGE="#D85A30", LINE="rgba(216,90,48,0.55)", FILL="rgba(216,90,48,0.08)";
+const css=getComputedStyle(document.documentElement);
+const MUTED=css.getPropertyValue('--muted').trim()||"#888", GRID=css.getPropertyValue('--grid').trim()||"rgba(136,135,128,0.15)";
+
+const series=[
+ {x:1980.00,y:100,d:"1980.1.4"},{x:1985.00,y:140,d:"1985년"},{x:1987.00,y:525,d:"1987년"},
+ {x:1988.00,y:907,d:"1988년"},{x:1989.25,y:1003,d:"1989.3.31"},{x:1989.90,y:909,d:"1989.12"},
+ {x:1990.70,y:560,d:"1990.9"},{x:1992.60,y:459,d:"1992.8"},{x:1994.80,y:1027,d:"1994.10"},
+ {x:1996.00,y:880,d:"1996년"},{x:1997.00,y:650,d:"1997년"},{x:1997.95,y:376,d:"1997.12"},
+ {x:1998.50,y:280,d:"1998.6 (외환위기 저점)"},{x:1999.95,y:1028,d:"1999.12"},{x:2000.05,y:1066,d:"2000.1"},
+ {x:2001.70,y:504,d:"2001.9"},{x:2002.30,y:937,d:"2002.4"},{x:2003.20,y:515,d:"2003.3"},
+ {x:2004.00,y:895,d:"2004년"},{x:2005.00,y:1379,d:"2005년"},{x:2006.00,y:1434,d:"2006년"},
+ {x:2007.56,y:2004,d:"2007.7.25"},{x:2007.83,y:2064,d:"2007.10"},{x:2008.80,y:1100,d:"2008.10"},
+ {x:2008.83,y:892,d:"2008.10 (금융위기 저점)"},{x:2009.95,y:1683,d:"2009.12"},{x:2010.95,y:2051,d:"2010.12"},
+ {x:2011.40,y:2228,d:"2011.5"},{x:2011.70,y:1652,d:"2011.9"},{x:2013.00,y:1997,d:"2013년"},
+ {x:2014.00,y:1915,d:"2014년"},{x:2015.40,y:2173,d:"2015.5"},{x:2016.00,y:1961,d:"2016년"},
+ {x:2017.00,y:2026,d:"2017년"},{x:2017.95,y:2467,d:"2017.12"},{x:2018.05,y:2598,d:"2018.1"},
+ {x:2018.95,y:2041,d:"2018.12"},{x:2019.95,y:2198,d:"2019.12"},{x:2020.22,y:1457,d:"2020.3 (코로나 저점)"},
+ {x:2020.95,y:2873,d:"2020.12"},{x:2021.02,y:3031,d:"2021.1.7"},{x:2021.50,y:3305,d:"2021.6"},
+ {x:2021.95,y:2977,d:"2021.12"},{x:2022.80,y:2155,d:"2022.10"},{x:2023.00,y:2236,d:"2023.1"},
+ {x:2023.95,y:2655,d:"2023.12"},{x:2024.55,y:2891,d:"2024.7"},{x:2024.95,y:2399,d:"2024.12"},
+ {x:2025.40,y:2685,d:"2025.5 (52주 저점)"},{x:2025.65,y:3100,d:"2025.8"},{x:2025.82,y:4000,d:"2025.10.27"},
+ {x:2025.99,y:4214,d:"2025.12"},{x:2026.07,y:5000,d:"2026.1.27"},{x:2026.15,y:6000,d:"2026.2.25"},
+ {x:2026.35,y:7000,d:"2026.5.6"},{x:2026.40,y:8048,d:"2026.5.26"},{x:2026.41,y:8476,d:"2026.5.29"}
+];
+const miles=[
+ {x:1980.00,y:100, d:"1980.1.4",  t:"기준점 100"},
+ {x:1989.25,y:1003,d:"1989.3.31", t:"1,000 돌파"},
+ {x:2007.56,y:2004,d:"2007.7.25", t:"2,000 돌파"},
+ {x:2021.02,y:3031,d:"2021.1.7",  t:"3,000 돌파"},
+ {x:2025.82,y:4000,d:"2025.10.27",t:"4,000 돌파"},
+ {x:2026.07,y:5000,d:"2026.1.27", t:"5,000 돌파"},
+ {x:2026.15,y:6000,d:"2026.2.25", t:"6,000 돌파"},
+ {x:2026.35,y:7000,d:"2026.5.6",  t:"7,000 돌파"},
+ {x:2026.40,y:8048,d:"2026.5.26", t:"8,000 돌파"}
+];
+const labelPlugin={id:"ml",afterDatasetsDraw(c){
+  const ctx=c.ctx, ms=c.getDatasetMeta(1);
+  ctx.save(); ctx.font="600 12px -apple-system,sans-serif"; ctx.fillStyle=ORANGE; ctx.textAlign="center";
+  ms.data.forEach((pt,i)=>{ if(pt&&!isNaN(pt.y)) ctx.fillText(miles[i].y.toLocaleString(), pt.x, pt.y-13); });
+  ctx.restore();
+}};
+function cfg(type){
+ const log = type==="log";
+ return {type:"line",
+  data:{datasets:[
+   {label:"코스피",data:series,borderColor:LINE,borderWidth:2,pointRadius:2.5,pointHoverRadius:5,
+    pointBackgroundColor:LINE,pointBorderColor:LINE,fill:true,backgroundColor:FILL,tension:0.2},
+   {label:"경신",data:miles,showLine:false,pointBackgroundColor:ORANGE,pointBorderColor:"#fff",
+    pointBorderWidth:2,pointRadius:7,pointHoverRadius:9}
+  ]},
+  options:{responsive:true,maintainAspectRatio:false,
+   interaction:{mode:"nearest",intersect:false,axis:"x"},
+   plugins:{legend:{display:false},
+    tooltip:{backgroundColor:"rgba(30,30,28,0.92)",titleColor:"#fff",bodyColor:"#fff",padding:10,
+     displayColors:false,titleFont:{size:13,weight:"600"},bodyFont:{size:13},
+     callbacks:{
+       title:(it)=>{const p=it[0]; const arr=p.datasetIndex===1?miles:series; return arr[p.dataIndex].d;},
+       label:(c)=>{const arr=c.datasetIndex===1?miles:series; const o=arr[c.dataIndex];
+                   return (o.t? o.t+" · ":"") + "코스피 "+c.parsed.y.toLocaleString();}
+     }}},
+   scales:{
+    x:{type:"linear",min:1979,max:2027.5,
+       ticks:{stepSize:5,callback:(v)=>v+"년",color:MUTED,font:{size:11}},grid:{color:GRID}},
+    y: log
+      ?{type:"logarithmic",min:80,max:10000,
+        ticks:{color:MUTED,font:{size:11},callback:(v)=>[100,300,1000,3000,8000].includes(v)?v.toLocaleString():null},
+        grid:{color:GRID}}
+      :{type:"linear",min:0,max:9000,
+        ticks:{stepSize:1000,color:MUTED,font:{size:11},callback:(v)=>v.toLocaleString()},grid:{color:GRID}}
+   }},
+  plugins:[labelPlugin]};
+}
+let chart=new Chart(document.getElementById("kospi"),cfg("linear"));
+const bl=document.getElementById("btn-lin"), bg=document.getElementById("btn-log");
+function set(mode){
+  chart.destroy(); chart=new Chart(document.getElementById("kospi"),cfg(mode));
+  if(mode==="log"){bg.classList.add("on");bl.classList.remove("on");}
+  else{bl.classList.add("on");bg.classList.remove("on");}
+}
+bl.onclick=()=>set("linear"); bg.onclick=()=>set("log");
+</script>
+</body>
+</html>
