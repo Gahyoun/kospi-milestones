@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>김가현은 주식 안합니다.</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="data.js"></script>
+<style>
+  :root{ --red:#CD2E3A; --blue:#0047A0; --orange:#E8600F; --ink:#1a1a18; --muted:#6b6a64;
+         --grid:rgba(136,135,128,0.15); --bg:#ffffff; --card:#faf9f6; --band:rgba(0,71,160,0.10); }
+  @media (prefers-color-scheme: dark){
+    :root{ --ink:#ededea; --muted:#a3a29b; --grid:rgba(200,200,190,0.12); --bg:#1a1a18; --card:#242420; --band:rgba(120,160,255,0.14); }
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; padding:24px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif;
+        background:var(--bg); color:var(--ink); }
+  .wrap{ max-width:880px; margin:0 auto; }
+  h1{ font-size:22px; font-weight:700; margin:0 0 4px;
+      background:linear-gradient(90deg,var(--blue),var(--red)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub{ font-size:13px; color:var(--muted); margin:0 0 16px; }
+  .tabs{ display:inline-flex; border:1px solid var(--grid); border-radius:10px; overflow:hidden; margin-bottom:18px; }
+  .tabs a{ text-decoration:none; padding:8px 18px; font-size:13px; color:var(--muted); background:transparent; }
+  .tabs a.on{ background:linear-gradient(90deg,var(--blue),var(--red)); color:#fff; font-weight:600; }
+  .legend-row{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; font-size:13px; }
+  .lg{ display:inline-flex; align-items:center; gap:6px; color:var(--ink); }
+  .sw{ width:14px; height:3px; border-radius:2px; display:inline-block; }
+  .chart-box{ position:relative; width:100%; height:420px; background:var(--card); border-radius:12px; padding:12px; cursor:crosshair; }
+  .panel{ margin-top:14px; background:var(--card); border-radius:12px; padding:14px 16px; }
+  .panel h2{ font-size:14px; margin:0 0 4px; font-weight:600; }
+  .range{ font-size:12.5px; color:var(--muted); margin:0 0 12px; }
+  .range b{ color:var(--ink); }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td{ padding:8px 6px; text-align:right; border-bottom:1px solid var(--grid); }
+  th:first-child,td:first-child{ text-align:left; }
+  thead th{ color:var(--muted); font-weight:500; font-size:12px; }
+  .name{ display:inline-flex; align-items:center; gap:7px; font-weight:600; }
+  .up{ color:var(--red); } .down{ color:var(--blue); }
+  .note{ font-size:12px; color:var(--muted); margin-top:14px; line-height:1.7;
+         background:var(--card); border-radius:10px; padding:12px 14px; }
+  .note b{ color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>김가현은 주식 안합니다.</h1>
+  <p class="sub">삼성전자 · SK하이닉스 · 코스피 — 2020.1 = 100 기준 상대지수 · 월말 종가</p>
+
+  <div class="tabs">
+    <a href="index.html">코스피 보기</a>
+    <a href="compare.html" class="on">삼전·하닉·코스피 보기</a>
+  </div>
+
+  <div class="legend-row">
+    <span class="lg"><span class="sw" style="background:var(--blue)"></span>삼성전자 (005930)</span>
+    <span class="lg"><span class="sw" style="background:var(--orange)"></span>SK하이닉스 (000660)</span>
+    <span class="lg"><span class="sw" style="background:var(--red)"></span>코스피 (^KS11)</span>
+  </div>
+
+  <div class="chart-box"><canvas id="cmp"></canvas></div>
+
+  <div class="panel">
+    <h2>구간 증감</h2>
+    <p class="range">📌 그래프를 <b>드래그</b>하면 그 기간의 증감정도·증감률이 표시됩니다.
+       현재 구간: <b id="r0">–</b> → <b id="r1">–</b></p>
+    <table>
+      <thead><tr><th>종목</th><th>시작</th><th>끝</th><th>증감정도</th><th>증감률</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <p class="note">
+    <b>데이터:</b> 2020.1~2026.7 월말 종가 실측(야후 파이낸스). 세 종목의 절대 단위가 달라
+    <b>2020년 1월을 100</b>으로 재기준화한 상대지수로 그렸습니다. 표의 <b>증감정도·증감률</b>은
+    <b>실제 값</b>(코스피=지수, 주식=원) 기준입니다.<br>
+    2025년 하반기~2026년 AI·반도체(HBM) 랠리로 하이닉스·삼성전자가 코스피 상승을 견인했습니다.
+  </p>
+</div>
+
+<script>
+const RED="#CD2E3A", BLUE="#0047A0", ORANGE="#E8600F";
+const css=getComputedStyle(document.documentElement);
+const MUTED=css.getPropertyValue('--muted').trim()||"#888",
+      GRID=css.getPropertyValue('--grid').trim()||"rgba(136,135,128,0.15)",
+      BAND=css.getPropertyValue('--band').trim()||"rgba(0,71,160,0.10)";
+
+// rebase to first point = 100
+function rebase(a){ const b=a[0].v; return a.map(o=>({x:o.x, y:+(o.v/b*100).toFixed(2), v:o.v, d:o.d})); }
+const SEC=rebase(CMP_SEC), HYN=rebase(CMP_HYNIX), KOS=rebase(CMP_KOSPI);
+const SERIES=[
+  {key:"삼성전자", color:BLUE,   unit:"원", data:SEC},
+  {key:"SK하이닉스", color:ORANGE, unit:"원", data:HYN},
+  {key:"코스피",   color:RED,    unit:"",   data:KOS}
+];
+
+// selection band + guide lines
+let sel=null; // {x0,x1}
+const bandPlugin={id:"band",beforeDatasetsDraw(c){
+  if(!sel) return;
+  const {ctx,chartArea,scales}=c; const xs=scales.x;
+  let px0=xs.getPixelForValue(sel.x0), px1=xs.getPixelForValue(sel.x1);
+  const l=Math.max(Math.min(px0,px1),chartArea.left), r=Math.min(Math.max(px0,px1),chartArea.right);
+  ctx.save();
+  ctx.fillStyle=BAND; ctx.fillRect(l,chartArea.top,r-l,chartArea.bottom-chartArea.top);
+  ctx.strokeStyle="rgba(120,120,120,0.55)"; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+  [l,r].forEach(px=>{ctx.beginPath();ctx.moveTo(px,chartArea.top);ctx.lineTo(px,chartArea.bottom);ctx.stroke();});
+  ctx.restore();
+}};
+
+const chart=new Chart(document.getElementById("cmp"),{
+  type:"line",
+  data:{datasets:SERIES.map(s=>({
+    label:s.key,data:s.data,borderColor:s.color,backgroundColor:s.color,
+    borderWidth:2,pointRadius:0,pointHoverRadius:4,tension:0.25,fill:false
+  }))},
+  options:{responsive:true,maintainAspectRatio:false,
+   interaction:{mode:"index",intersect:false},
+   plugins:{legend:{display:false},
+    tooltip:{backgroundColor:"rgba(30,30,28,0.92)",titleColor:"#fff",bodyColor:"#fff",padding:10,
+     titleFont:{size:13,weight:"600"},bodyFont:{size:12.5},
+     callbacks:{
+       title:(it)=>SERIES[0].data[it[0].dataIndex].d,
+       label:(c)=>{const s=SERIES[c.datasetIndex]; const o=s.data[c.dataIndex];
+         return ` ${s.key}: ${o.y.toFixed(0)}  (${s.unit==="원"?o.v.toLocaleString()+"원":o.v.toLocaleString()})`;}
+     }}},
+   scales:{
+    x:{type:"linear",min:2019.95,max:2026.6,
+       ticks:{stepSize:1,callback:(v)=>Math.round(v)+"년",color:MUTED,font:{size:11}},grid:{color:GRID}},
+    y:{type:"linear",title:{display:true,text:"2020.1 = 100",color:MUTED,font:{size:11}},
+       ticks:{color:MUTED,font:{size:11}},grid:{color:GRID}}
+   }},
+  plugins:[bandPlugin]
+});
+
+// ---- drag to select ----
+const box=document.querySelector(".chart-box");
+function xAt(evt){
+  const rect=chart.canvas.getBoundingClientRect();
+  const cx=(evt.touches?evt.touches[0].clientX:evt.clientX)-rect.left;
+  const xs=chart.scales.x;
+  let v=xs.getValueForPixel(cx);
+  v=Math.max(KOS[0].x, Math.min(KOS[KOS.length-1].x, v));
+  return v;
+}
+function nearest(arr,x){ let bi=0,bd=1e9; arr.forEach((o,i)=>{const d=Math.abs(o.x-x); if(d<bd){bd=d;bi=i;}}); return bi; }
+let dragging=false, startX=null;
+function onDown(e){ dragging=true; startX=xAt(e); sel={x0:startX,x1:startX}; chart.update("none"); e.preventDefault(); }
+function onMove(e){ if(!dragging)return; sel={x0:startX,x1:xAt(e)}; chart.update("none"); render(); e.preventDefault(); }
+function onUp(){ if(!dragging)return; dragging=false;
+  if(Math.abs(sel.x1-sel.x0)<0.02){ sel=null; chart.update("none"); render(); } else render(); }
+box.addEventListener("mousedown",onDown); window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+box.addEventListener("touchstart",onDown,{passive:false}); box.addEventListener("touchmove",onMove,{passive:false}); box.addEventListener("touchend",onUp);
+
+const fmt=(n,u)=> (u==="원") ? Math.round(n).toLocaleString()+"원" : n.toLocaleString(undefined,{maximumFractionDigits:1});
+function render(){
+  const tb=document.getElementById("tbody");
+  let x0,x1;
+  if(sel){ x0=Math.min(sel.x0,sel.x1); x1=Math.max(sel.x0,sel.x1); }
+  else { x0=KOS[0].x; x1=KOS[KOS.length-1].x; }
+  const i0=nearest(KOS,x0), i1=nearest(KOS,x1);
+  document.getElementById("r0").textContent=KOS[i0].d;
+  document.getElementById("r1").textContent=KOS[i1].d;
+  tb.innerHTML=SERIES.map(s=>{
+    const a=s.data[i0].v, b=s.data[i1].v;
+    const diff=b-a, pct=(b/a-1)*100;
+    const cls=diff>=0?"up":"down", sign=diff>=0?"+":"−";
+    return `<tr>
+      <td><span class="name"><span class="sw" style="background:${s.color}"></span>${s.key}</span></td>
+      <td>${fmt(a,s.unit)}</td>
+      <td>${fmt(b,s.unit)}</td>
+      <td class="${cls}">${sign}${fmt(Math.abs(diff),s.unit)}</td>
+      <td class="${cls}">${sign}${Math.abs(pct).toFixed(1)}%</td>
+    </tr>`;
+  }).join("");
+}
+render(); // default = full range
+</script>
+</body>
+</html>
